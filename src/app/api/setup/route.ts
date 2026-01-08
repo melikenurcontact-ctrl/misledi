@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/db"; // Use the existing prisma client instance
+import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-// Encryption helper specifically for this setup route to ensure consistency
+// Encryption helper
 function encrypt(text: string): string {
     const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || "misledi_default_encryption_key_32b";
-    // Ensure key is 32 bytes
     const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -15,8 +14,6 @@ function encrypt(text: string): string {
     encrypted += cipher.final('hex');
 
     const authTag = cipher.getAuthTag();
-
-    // Return Format: iv:authTag:encrypted
     return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
 }
 
@@ -29,30 +26,23 @@ export async function GET() {
             update: {},
             create: {
                 email: "admin@misledi.com",
-                password: hashedPassword,
-                name: "Admin",
-                role: "ADMIN"
+                passwordHash: hashedPassword,
             }
         });
 
-        // 2. Integration
+        // 2. Trendyol Integration (Passive by default)
         await prisma.integration.upsert({
-            where: { id: "trendyol" }, // Assuming ID is predictable or check provider
-            update: {}, // Don't overwrite if exists
+            where: { id: "trendyol-main" },
+            update: {},
             create: {
-                id: "trendyol",
+                id: "trendyol-main",
                 provider: "trendyol",
-                name: "Trendyol Mağazam",
-                credentials: encrypt(JSON.stringify({
+                credentialsEncrypted: encrypt(JSON.stringify({
                     supplierId: "",
                     apiKey: "",
                     apiSecret: ""
                 })),
-                settings: JSON.stringify({
-                    commissionRate: 21,
-                    taxRate: 20
-                }),
-                status: "PASSIVE"
+                status: "PENDING"
             }
         });
 
@@ -69,9 +59,20 @@ export async function GET() {
             }
         });
 
-        return NextResponse.json({ message: "Setup completed successfully! database seeded." });
+        // 4. Create database tables
+        // Tables should already exist from prisma db push
 
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({
+            success: true,
+            message: "Kurulum tamamlandı! Artık giriş yapabilirsiniz.",
+            credentials: {
+                email: "admin@misledi.com",
+                password: "123456"
+            }
+        });
+
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Bilinmeyen hata";
+        return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 }
