@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
         try {
             // Gerçek entegrasyon varsa veriyi çek, yoksa varsayılanları kullan
-            marketData = await trendyolService.getProductMarketIntelligence(product.barcode);
+            marketData = await trendyolService.getProductMarketIntelligence(product.barcode ?? "");
         } catch (error) {
             console.warn("Trendyol API error, using fallback:", error);
             // Fallback data
@@ -74,7 +74,8 @@ export async function GET(request: NextRequest) {
                 id: product.id,
                 title: product.title,
                 sku: product.sku,
-                image: product.image,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                image: (product as any).image ?? null,
             },
             marketData,
             matrix
