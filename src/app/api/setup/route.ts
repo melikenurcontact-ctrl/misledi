@@ -1,80 +1,77 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/db"; // Use the existing prisma client instance
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
-// Tek seferlik setup endpoint - admin ve ayarları oluşturur
+// Encryption helper specifically for this setup route to ensure consistency
+function encrypt(text: string): string {
+    const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || "misledi_default_encryption_key_32b";
+    // Ensure key is 32 bytes
+    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    const authTag = cipher.getAuthTag();
+
+    // Return Format: iv:authTag:encrypted
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+}
+
 export async function GET() {
-    const prisma = new PrismaClient();
-
     try {
-        // Zaten admin var mı kontrol et
-        const existingAdmin = await prisma.user.findFirst();
-
-        if (existingAdmin) {
-            await prisma.$disconnect();
-            return NextResponse.json({
-                success: false,
-                message: "Setup zaten tamamlanmış. Admin kullanıcı mevcut.",
-                email: existingAdmin.email,
-            });
-        }
-
-        // Admin kullanıcı oluştur
-        const hashedPassword = await bcrypt.hash("admin123", 12);
-
-        const admin = await prisma.user.create({
-            data: {
+        // 1. Admin User
+        const hashedPassword = await bcrypt.hash("123456", 10);
+        await prisma.user.upsert({
+            where: { email: "admin@misledi.com" },
+            update: {},
+            create: {
                 email: "admin@misledi.com",
-                passwordHash: hashedPassword,
-                isActive: true,
-            },
+                password: hashedPassword,
+                name: "Admin",
+                role: "ADMIN"
+            }
         });
 
-        // Varsayılan ayarlar
-        const settings = [
-            { key: "default_commission_percent", value: "15" },
-            { key: "default_shipping_cost", value: "35" },
-            { key: "low_margin_threshold", value: "5" },
-        ];
-
-        for (const setting of settings) {
-            await prisma.setting.upsert({
-                where: { key: setting.key },
-                update: { value: setting.value },
-                create: setting,
-            });
-        }
-
-        // Varsayılan entegrasyon
-        await prisma.integration.create({
-            data: {
-                id: "trendyol-default",
+        // 2. Integration
+        await prisma.integration.upsert({
+            where: { id: "trendyol" }, // Assuming ID is predictable or check provider
+            update: {}, // Don't overwrite if exists
+            create: {
+                id: "trendyol",
                 provider: "trendyol",
-                status: "PENDING",
-            },
+                name: "Trendyol Mağazam",
+                credentials: encrypt(JSON.stringify({
+                    supplierId: "",
+                    apiKey: "",
+                    apiSecret: ""
+                })),
+                settings: JSON.stringify({
+                    commissionRate: 21,
+                    taxRate: 20
+                }),
+                status: "PASSIVE"
+            }
         });
 
-        await prisma.$disconnect();
-
-        return NextResponse.json({
-            success: true,
-            message: "Setup tamamlandı!",
-            admin: {
-                email: admin.email,
-                password: "admin123 (lütfen değiştirin)",
-            },
-            settings: settings,
+        // 3. Settings
+        await prisma.setting.upsert({
+            where: { key: "global_config" },
+            update: {},
+            create: {
+                key: "global_config",
+                value: JSON.stringify({
+                    siteName: "Misledi",
+                    currency: "TRY"
+                })
+            }
         });
-    } catch (error) {
-        await prisma.$disconnect();
-        console.error("Setup error:", error);
-        return NextResponse.json(
-            {
-                success: false,
-                error: "Setup başarısız",
-                details: error instanceof Error ? error.message : String(error)
-            },
-            { status: 500 }
-        );
+
+        return NextResponse.json({ message: "Setup completed successfully! database seeded." });
+
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
