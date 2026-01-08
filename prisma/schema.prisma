@@ -1,0 +1,220 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// MISLEDI - Veritabanı Şeması
+// ==========================================
+
+// 1. KULLANICILAR (Max 3 Admin)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // İlişkiler
+  costCards  CostCard[]
+  auditLogs  AuditLog[]
+
+  @@map("users")
+}
+
+// 2. ENTEGRASYONLAR (Trendyol API)
+model Integration {
+  id                   String    @id @default(cuid())
+  provider             String    @default("trendyol")
+  credentialsEncrypted String?   @map("credentials_encrypted")
+  supplierId           String?   @map("supplier_id")
+  lastSyncAt           DateTime? @map("last_sync_at")
+  status               String    @default("PENDING") // PENDING, OK, ERROR
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  @@map("integrations")
+}
+
+// 3. ÜRÜNLER
+model Product {
+  id                   String    @id @default(cuid())
+  providerProductId    String?   @map("provider_product_id")
+  sku                  String    @unique
+  barcode              String?
+  title                String
+  salePrice            Decimal   @map("sale_price")
+  listPrice            Decimal?  @map("list_price")
+  stock                Int       @default(0)
+  isActive             Boolean   @default(true) @map("is_active")
+  lastProviderUpdateAt DateTime? @map("last_provider_update_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  // İlişkiler
+  costCard   CostCard?
+  orderLines OrderLine[]
+  alerts     Alert[]
+
+  @@map("products")
+}
+
+// 4. MALİYET KARTLARI (1-1 Ürün ile)
+model CostCard {
+  id                     String   @id @default(cuid())
+  productId              String   @unique @map("product_id")
+  
+  // Ürün Maliyeti
+  costPurchase           Decimal  @map("cost_purchase")           // KDV dahil alış maliyeti
+  costPackaging          Decimal  @default(0) @map("cost_packaging") // Karton/paketleme maliyeti
+  
+  // Komisyonlar (KDV hariç satış üzerinden hesaplanır)
+  commissionPercent      Decimal  @default(17) @map("commission_percent")      // Trendyol komisyonu %
+  influencerPercent      Decimal  @default(0) @map("influencer_percent")       // Influencer komisyonu %
+  
+  // Kargo (KDV hariç girilir, sistem +%20 ekler)
+  shippingBase           Decimal  @default(38.77) @map("shipping_base")        // Kargo baz ücret (KDV hariç)
+  
+  // Trendyol Hizmet Bedeli (KDV hariç girilir, sistem +%20 ekler)
+  serviceFeeBase         Decimal  @default(6.99) @map("service_fee_base")      // Hizmet bedeli (KDV hariç)
+  
+  // KDV Oranı
+  kdvRate                Decimal  @default(20) @map("kdv_rate")                // KDV oranı %
+  
+  currency               String   @default("TRY")
+  updatedById            String?  @map("updated_by_id")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  // İlişkiler
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  updatedBy User?   @relation(fields: [updatedById], references: [id])
+
+  @@map("cost_cards")
+}
+
+// 5. SİPARİŞLER
+model Order {
+  id                String   @id @default(cuid())
+  providerOrderId   String   @unique @map("provider_order_id")
+  orderNumber       String?  @map("order_number")
+  orderDate         DateTime @map("order_date")
+  status            String   // Created, Picking, Invoiced, Shipped, Delivered, Cancelled, Returned
+  
+  // Fiyatlar
+  totalPrice        Decimal  @default(0) @map("total_price")   // Müşterinin ödediği toplam
+  grossPrice        Decimal  @default(0) @map("gross_price")   // Ürünlerin toplamı (indirim öncesi)
+  currency          String   @default("TRY")
+  
+  // Müşteri & Kargo
+  customerFirstName String?  @map("customer_first_name")
+  customerLastName  String?  @map("customer_last_name")
+  cargoTrackingNumber String? @map("cargo_tracking_number")
+  cargoProvider     String?  @map("cargo_provider")
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // İlişkiler
+  orderLines OrderLine[]
+
+  @@map("orders")
+}
+
+// 6. SİPARİŞ SATIRLARI
+model OrderLine {
+  id             String   @id @default(cuid())
+  orderId        String   @map("order_id")
+  providerLineId String?  @map("provider_line_id")
+  merchantSku    String?  @map("merchant_sku")
+  
+  productId      String?  @map("product_id")
+  skuSnapshot    String?  @map("sku_snapshot") // O anki SKU
+  titleSnapshot  String?  @map("title_snapshot") // O anki Başlık
+  
+  quantity       Int
+  unitSalePrice  Decimal  @map("unit_sale_price")
+  vatBaseAmount  Decimal  @default(0) @map("vat_base_amount") // KDV Hariç Tutar
+  discountAmount Decimal  @default(0) @map("discount_amount")
+  
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // İlişkiler
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product           Product?           @relation(fields: [productId], references: [id])
+  profitCalculation ProfitCalculation?
+
+  @@map("order_lines")
+}
+
+// 7. KÂR HESAPLAMALARI (Cache)
+model ProfitCalculation {
+  id            String   @id @default(cuid())
+  orderLineId   String   @unique @map("order_line_id")
+  grossRevenue  Decimal  @map("gross_revenue")
+  commission    Decimal
+  cogs          Decimal  // Cost of Goods Sold
+  packaging     Decimal
+  shipping      Decimal
+  netProfit     Decimal  @map("net_profit")
+  marginPercent Decimal  @map("margin_percent")
+  calculatedAt  DateTime @default(now()) @map("calculated_at")
+  calcVersion   Int      @default(1) @map("calc_version")
+
+  // İlişkiler
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+
+  @@map("profit_calculations")
+}
+
+// 8. UYARILAR
+model Alert {
+  id          String   @id @default(cuid())
+  type        String   // LOSS_NOW, BELOW_BREAK_EVEN, LOW_MARGIN, MISSING_COST
+  productId   String?  @map("product_id")
+  severity    String   @default("WARNING") // INFO, WARNING, CRITICAL
+  payloadJson String?  @map("payload_json")
+  isRead      Boolean  @default(false) @map("is_read")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // İlişkiler
+  product Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("alerts")
+}
+
+// 9. DENETİM LOGLARI (Silinemez)
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  action     String   // LOGIN, LOGOUT, UPDATE_COST, SYNC_TRIGGER, etc.
+  entityType String   @map("entity_type") // User, Product, CostCard, etc.
+  entityId   String?  @map("entity_id")
+  diffJson   String?  @map("diff_json") // {old: {...}, new: {...}}
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // İlişkiler
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// 10. AYARLAR (Sistem Varsayılanları)
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
