@@ -228,7 +228,7 @@ export default function ProductsPage() {
                         className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10"
                     >
                         <RefreshCw className="w-4 h-4 mr-2" />
-                        Trendyol'dan Çek
+                        Trendyol&apos;dan Çek
                     </Button>
                     <Button
                         onClick={fetchProducts}
