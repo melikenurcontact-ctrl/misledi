@@ -88,6 +88,49 @@ export default function ProductsPage() {
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+    // Manual Product Entry Modal State
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [newProduct, setNewProduct] = useState({
+        sku: "",
+        barcode: "",
+        title: "",
+        salePrice: "",
+        listPrice: "",
+        stock: "0",
+        costPurchase: "",
+        costPackaging: "",
+        commissionPercent: "21"
+    });
+
+    const handleAddProduct = async () => {
+        if (!newProduct.sku || !newProduct.title || !newProduct.salePrice) {
+            alert("SKU, başlık ve satış fiyatı zorunludur!");
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            const res = await fetch("/api/products/manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newProduct)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setShowAddModal(false);
+                setNewProduct({ sku: "", barcode: "", title: "", salePrice: "", listPrice: "", stock: "0", costPurchase: "", costPackaging: "", commissionPercent: "21" });
+                await fetchProducts();
+            } else {
+                alert(data.error || "Ürün eklenemedi");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Bir hata oluştu");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     useEffect(() => {
         fetchProducts();
     }, []);
@@ -207,12 +250,19 @@ export default function ProductsPage() {
                 </div>
                 <div className="flex gap-2">
                     <Button
+                        onClick={() => setShowAddModal(true)}
+                        className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700"
+                    >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Ürün Ekle
+                    </Button>
+                    <Button
                         onClick={async () => {
                             setIsLoading(true);
                             try {
                                 const res = await fetch("/api/products/sync", { method: "POST" });
                                 if (res.ok) {
-                                    await fetchProducts(); // Listeyi güncelle
+                                    await fetchProducts();
                                 } else {
                                     alert("Ürünler çekilemedi. API ayarlarını kontrol edin.");
                                 }
@@ -450,6 +500,146 @@ export default function ProductsPage() {
                                         Analiz verisi alınamadı.
                                     </div>
                                 )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Manual Product Entry Modal */}
+            <AnimatePresence>
+                {showAddModal && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6 w-full max-w-lg shadow-2xl"
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-bold text-white">Yeni Ürün Ekle</h2>
+                                <Button variant="ghost" size="icon" onClick={() => setShowAddModal(false)}>
+                                    <X className="w-5 h-5" />
+                                </Button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm text-slate-400 mb-1 block">SKU *</label>
+                                        <Input
+                                            value={newProduct.sku}
+                                            onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
+                                            placeholder="URUN-001"
+                                            className="bg-slate-800/50 border-slate-700"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm text-slate-400 mb-1 block">Barkod</label>
+                                        <Input
+                                            value={newProduct.barcode}
+                                            onChange={(e) => setNewProduct({ ...newProduct, barcode: e.target.value })}
+                                            placeholder="8680000000000"
+                                            className="bg-slate-800/50 border-slate-700"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-sm text-slate-400 mb-1 block">Ürün Başlığı *</label>
+                                    <Input
+                                        value={newProduct.title}
+                                        onChange={(e) => setNewProduct({ ...newProduct, title: e.target.value })}
+                                        placeholder="Ürün adını girin"
+                                        className="bg-slate-800/50 border-slate-700"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="text-sm text-slate-400 mb-1 block">Satış Fiyatı *</label>
+                                        <Input
+                                            value={newProduct.salePrice}
+                                            onChange={(e) => setNewProduct({ ...newProduct, salePrice: e.target.value })}
+                                            placeholder="199.99"
+                                            type="number"
+                                            className="bg-slate-800/50 border-slate-700"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm text-slate-400 mb-1 block">Liste Fiyatı</label>
+                                        <Input
+                                            value={newProduct.listPrice}
+                                            onChange={(e) => setNewProduct({ ...newProduct, listPrice: e.target.value })}
+                                            placeholder="249.99"
+                                            type="number"
+                                            className="bg-slate-800/50 border-slate-700"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm text-slate-400 mb-1 block">Stok</label>
+                                        <Input
+                                            value={newProduct.stock}
+                                            onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
+                                            placeholder="100"
+                                            type="number"
+                                            className="bg-slate-800/50 border-slate-700"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-slate-700 pt-4 mt-4">
+                                    <h3 className="text-sm font-medium text-slate-300 mb-3">Maliyet Bilgisi</h3>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="text-sm text-slate-400 mb-1 block">Alış Maliyeti</label>
+                                            <Input
+                                                value={newProduct.costPurchase}
+                                                onChange={(e) => setNewProduct({ ...newProduct, costPurchase: e.target.value })}
+                                                placeholder="80.00"
+                                                type="number"
+                                                className="bg-slate-800/50 border-slate-700"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm text-slate-400 mb-1 block">Paketleme</label>
+                                            <Input
+                                                value={newProduct.costPackaging}
+                                                onChange={(e) => setNewProduct({ ...newProduct, costPackaging: e.target.value })}
+                                                placeholder="5.00"
+                                                type="number"
+                                                className="bg-slate-800/50 border-slate-700"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm text-slate-400 mb-1 block">Komisyon %</label>
+                                            <Input
+                                                value={newProduct.commissionPercent}
+                                                onChange={(e) => setNewProduct({ ...newProduct, commissionPercent: e.target.value })}
+                                                placeholder="21"
+                                                type="number"
+                                                className="bg-slate-800/50 border-slate-700"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1 border-slate-600"
+                                        onClick={() => setShowAddModal(false)}
+                                    >
+                                        İptal
+                                    </Button>
+                                    <Button
+                                        className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600"
+                                        onClick={handleAddProduct}
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? "Ekleniyor..." : "Ürünü Kaydet"}
+                                    </Button>
+                                </div>
                             </div>
                         </motion.div>
                     </div>
