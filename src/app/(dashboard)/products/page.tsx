@@ -311,7 +311,7 @@ export default function ProductsPage() {
                                                     {formatMoney(product.estimatedProfit)}
                                                 </span>
                                                 <span className="text-[10px] text-slate-500">
-                                                    %{formatPercent(product.marginPercent)}
+                                                    %{formatPercent(product.marginPercent ?? 0)}
                                                 </span>
                                             </div>
                                         ) : (
