@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
         let finalApiSecret = apiSecret;
 
         if (apiKey.includes("***") || apiSecret.includes("***")) {
-            const existingIntegration = await prisma.integration.findUnique({
-                where: { id: "trendyol-default" }
+            const existingIntegration = await prisma.integration.findFirst({
+                where: { provider: "trendyol" }
             });
 
             if (existingIntegration && existingIntegration.credentialsEncrypted) {

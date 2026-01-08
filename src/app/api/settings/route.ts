@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
         }
 
         // Mevcut entegrasyonu çek (Eski şifreleri korumak için)
-        const existingIntegration = await prisma.integration.findUnique({
-            where: { id: "trendyol-default" }
+        const existingIntegration = await prisma.integration.findFirst({
+            where: { provider: "trendyol" }
         });
 
         let finalApiKey = apiKey;
@@ -88,9 +88,10 @@ export async function POST(request: NextRequest) {
             apiSecret: finalApiSecret
         }));
 
-        // Upsert integration
+        // Upsert integration - use existing ID or create new one
+        const integrationId = existingIntegration?.id || "trendyol-main";
         await prisma.integration.upsert({
-            where: { id: "trendyol-default" },
+            where: { id: integrationId },
             update: {
                 supplierId,
                 credentialsEncrypted,
